@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Glass Audio Player with Themes, Dark Mode, Third Language</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+    margin: 0;
+    padding: 40px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f0f0f, #1b1b1b, #101010);
+    background-size: 300% 300%;
+    animation: bgshift 20s ease infinite;
+    text-align: center;
+    color: #fff;
+    transition: background 0.5s, color 0.5s;
+}
+@keyframes bgshift { 0% {background-position:0% 50%} 50% {background-position:100% 50%} 100% {background-position:0% 50%} }
+
+.glass {
+    width: 80%;
+    margin: auto;
+    padding: 30px;
+    border-radius: 25px;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.18);
+    transition: background 0.5s, box-shadow 0.5s;
+}
+
+.controls {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+button, select {
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.25);
+    border: 1px solid rgba(255,255,255,0.25);
+    backdrop-filter: blur(15px);
+    color: #000;
+    cursor: pointer;
+    transition: 0.2s;
+}
+button:hover, select:hover { background: rgba(255,255,255,0.35); }
+select option { color: #000; background: #fff; }
+input[type=range] { width:200px; }
+
+#sub1,#sub2,#sub3 { font-size:28px; margin-top:25px; white-space:pre-line; transition:color 0.5s,font-size 0.3s; }
+#sub2,#sub3 { font-size:22px; color:#ddd; }
+
+.checkbox-container, .font-controls, .theme-controls, .seek-container { margin-top:15px; font-size:16px; display:flex; justify-content:center; align-items:center; gap:10px; }
+</style>
+</head>
+
+<body>
+
+<h1 style="font-weight:600;">Sri Lalithasahasranaamam Player</h1>
+
+<div class="glass">
+
+    <!-- Audio Controls -->
+    <div class="controls">
+        <button id="playPause">Play</button>
+        <button id="muteBtn">Mute</button>
+        <div>
+            <label>Volume</label><br>
+            <input type="range" id="volume" min="0" max="1" step="0.05" value="1">
+        </div>
+        <div>
+            <label>Speed</label><br>
+            <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1">
+        </div>
+    </div>
+
+    <!-- Seek Bar -->
+    <div class="seek-container">
+        <span id="elapsed">0:00</span>
+        <input type="range" id="seekBar" min="0" max="100" value="0" style="flex:1;">
+        <span id="remaining">0:00</span>
+    </div>
+
+    <!-- Language Options -->
+    <div class="checkbox-container">
+        <input type="checkbox" id="showEnglish">
+        <label for="showEnglish">English</label>
+        <input type="checkbox" id="showOtherLang">
+        <label for="showOtherLang">Other Language</label>
+        <select id="otherLangSelect">
+            <option value="tamil">Tamil</option>
+            <option value="malayalam">Malayalam</option>
+        </select>
+
+        <select id="fontSelect">
+            <option value="'Noto Serif Devanagari', serif">Noto Serif Devanagari</option>
+            <option value="'Kokila', serif">Kokila</option>
+            <option value="'Samarkan', cursive">Samarkan</option>
+            <option value="'Hind Vadodara', serif">Hind Vadodara</option>
+            <option value="'Sahadeva', serif">Sahadeva</option>
+            <option value="'Lohit Devanagari', serif">Lohit Devanagari</option>
+            <option value="'Tangerine', cursive">Tangerine</option>
+        </select>
+        <button id="fontInc">A+</button>
+        <button id="fontDec">A-</button>
+
+        <select id="themeSelect">
+            <option value="glass1">Apple Glass</option>
+            <option value="sunset">Sunset Gradient</option>
+            <option value="ocean">Ocean Blue</option>
+            <option value="forest">Forest Green</option>
+        </select>
+        <button id="darkModeToggle">Dark Mode</button>
+    </div>
+
+    <!-- Subtitles -->
+    <div id="sub1" style="font-family:'Noto Serif Devanagari', serif;"></div>
+    <div id="sub2" style="font-family:'Noto Serif Devanagari', serif;"></div>
+    <div id="sub3" style="font-family:'Noto Serif Tamil, Noto Serif Malayalam, serif';"></div>
+
+</div>
+
+<div id="ytPlayer" style="display:none;"></div>
+
+<script>
+// --- Config ---
+const VIDEO_ID = "PGRhM77OSU0";
+const DEVANAGARI_VTT = "LSN_Devanagari_output.vtt";
+const ENGLISH_VTT = "LSN_English_output.vtt";
+const THIRD_LANG_VTT = { tamil: "LSN_Tamil_output.vtt", malayalam: "LSN_Malayalam_output.vtt" };
+
+let cues1=[], cues2=[], cues3=[];
+let ytPlayer=null;
+let darkMode=false;
+
+// --- YouTube API ---
+let tag=document.createElement("script");
+tag.src="https://www.youtube.com/iframe_api";
+document.head.appendChild(tag);
+
+function onYouTubeIframeAPIReady(){
+    ytPlayer=new YT.Player("ytPlayer",{
+        height:"0", width:"0", videoId:VIDEO_ID,
+        playerVars:{autoplay:0,controls:0,disablekb:1,fs:0,modestbranding:1,rel:0,enablejsapi:1,origin:"https://www.youtube.com"}
+    });
+}
+
+// --- Utilities ---
+function toSec(t){const [h,m,s]=t.split(":"); return (+h*3600)+(+m*60)+parseFloat(s);}
+function parseVTT(text, cueList){
+    const lines=text.split(/\r?\n/); cueList.length=0; let cue=null;
+    const timeRe=/(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})/;
+    for(let l of lines){
+        l=l.trim();
+        if(timeRe.test(l)){const [,start,end]=l.match(timeRe); cue={start:toSec(start),end:toSec(end),text:""};}
+        else if(l===""){if(cue){cueList.push(cue); cue=null;} }
+        else if(cue){cue.text+=l+"\n";}
+    }
+}
+
+// Load VTT files
+fetch(DEVANAGARI_VTT).then(r=>r.text()).then(txt=>parseVTT(txt,cues1)).catch(console.error);
+fetch(ENGLISH_VTT).then(r=>r.text()).then(txt=>parseVTT(txt,cues2)).catch(console.error);
+
+function loadThirdLang(){
+    const lang=document.getElementById("otherLangSelect").value;
+    fetch(THIRD_LANG_VTT[lang]).then(r=>r.text()).then(txt=>parseVTT(txt,cues3)).catch(console.error);
+}
+loadThirdLang();
+document.getElementById("otherLangSelect").onchange=loadThirdLang;
+
+// --- DOM Elements ---
+const sub1=document.getElementById("sub1"),
+      sub2=document.getElementById("sub2"),
+      sub3=document.getElementById("sub3"),
+      seekBar=document.getElementById("seekBar"),
+      elapsed=document.getElementById("elapsed"),
+      remaining=document.getElementById("remaining");
+
+const playPause = document.getElementById("playPause");
+const muteBtn = document.getElementById("muteBtn");
+const volumeSlider = document.getElementById("volume");
+const speedSlider = document.getElementById("speed");
+
+// --- Subtitle Loop ---
+setInterval(() => {
+    if(!ytPlayer?.getCurrentTime) return;
+    const t = ytPlayer.getCurrentTime();
+
+    const index = cues1.findIndex(c => t >= c.start && t <= c.end);
+
+    sub1.innerText = index !== -1 ? cues1[index].text.trim() : "";
+    sub2.innerText = (document.getElementById("showEnglish").checked && cues2[index]) ? cues2[index].text.trim() : "";
+    sub3.innerText = (document.getElementById("showOtherLang").checked && cues3[index]) ? cues3[index].text.trim() : "";
+
+    if(!ytPlayer?.getDuration) return;
+    const duration = ytPlayer.getDuration();
+    elapsed.innerText = formatTime(t);
+    remaining.innerText = formatTime(duration-t);
+    seekBar.value = duration ? (t/duration)*100 : 0;
+}, 100);
+
+// --- Controls ---
+playPause.onclick = () => {
+    if (!ytPlayer) return;
+    if (ytPlayer.getPlayerState() === YT.PlayerState.PLAYING){
+        ytPlayer.pauseVideo();
+        playPause.innerText = "Play";
+    } else {
+        ytPlayer.playVideo();
+        playPause.innerText = "Pause";
+    }
+};
+
+muteBtn.onclick = () => {
+    if (!ytPlayer) return;
+    if (ytPlayer.isMuted()){
+        ytPlayer.unMute();
+        muteBtn.innerText = "Mute";
+    } else {
+        ytPlayer.mute();
+        muteBtn.innerText = "Unmute";
+    }
+};
+
+volumeSlider.oninput = e => { if(ytPlayer) ytPlayer.setVolume(e.target.value*100); };
+speedSlider.oninput = e => { if(ytPlayer) ytPlayer.setPlaybackRate(parseFloat(e.target.value)); };
+
+// --- Font Controls ---
+const fontSelect=document.getElementById("fontSelect"),
+      fontInc=document.getElementById("fontInc"),
+      fontDec=document.getElementById("fontDec");
+let fontSize=28;
+fontSelect.onchange = ()=>{sub1.style.fontFamily=sub2.style.fontFamily=sub3.style.fontFamily=fontSelect.value;};
+fontInc.onclick = ()=>{fontSize+=2; sub1.style.fontSize=sub2.style.fontSize=sub3.style.fontSize=fontSize+"px";};
+fontDec.onclick = ()=>{fontSize-=2;if(fontSize<12)fontSize=12; sub1.style.fontSize=sub2.style.fontSize=sub3.style.fontSize=fontSize+"px";};
+
+// --- Themes / Dark Mode ---
+const themeSelect=document.getElementById("themeSelect"),
+      darkToggle=document.getElementById("darkModeToggle");
+
+const themes={
+    glass1:{bg:"linear-gradient(135deg,#0f0f0f,#1b1b1b,#101010)",glass:"rgba(255,255,255,0.12)",text:"#fff",sub:"#fff"},
+    sunset:{bg:"linear-gradient(135deg,#ff7e5f,#feb47b)",glass:"rgba(255,255,255,0.18)",text:"#000",sub:"#000"},
+    ocean:{bg:"linear-gradient(135deg,#2193b0,#6dd5ed)",glass:"rgba(255,255,255,0.18)",text:"#fff",sub:"#fff"},
+    forest:{bg:"linear-gradient(135deg,#56ab2f,#a8e063)",glass:"rgba(255,255,255,0.18)",text:"#000",sub:"#000"}
+};
+
+function applyTheme(theme){
+    document.body.style.background=theme.bg;
+    document.body.style.color=theme.text;
+    const g=document.querySelector(".glass");
+    g.style.background=theme.glass;
+    g.style.boxShadow=darkMode?"0 8px 40px rgba(0,0,0,0.7)":"0 8px 40px rgba(0,0,0,0.4)";
+    sub1.style.color=sub2.style.color=sub3.style.color=theme.sub;
+    document.querySelectorAll("button, label").forEach(b=>b.style.color=theme.text);
+    document.querySelectorAll("select").forEach(s=>{
+        s.style.background="rgba(255,255,255,0.25)";
+        s.style.color=theme.text==="#fff"?"#fff":"#000";
+    });
+    document.querySelectorAll("select option").forEach(o=>{
+        o.style.background=theme.text==="#fff"?"#222":"#fff";
+        o.style.color=theme.text==="#fff"?"#fff":"#000";
+    });
+}
+themeSelect.onchange = ()=>{darkMode=false; applyTheme(themes[themeSelect.value]);};
+darkToggle.onclick = ()=>{darkMode=!darkMode; if(darkMode) applyTheme({bg:"#0f0f0f",glass:"rgba(0,0,0,0.5)",text:"#fff",sub:"#fff"}); else applyTheme(themes[themeSelect.value]);};
+
+// --- Seek Helper ---
+function formatTime(seconds){const m=Math.floor(seconds/60); const s=Math.floor(seconds%60); return `${m}:${s.toString().padStart(2,'0')}`;}
+seekBar.oninput = ()=>{if(!ytPlayer?.getDuration)return; const duration=ytPlayer.getDuration(); ytPlayer.seekTo((seekBar.value/100)*duration,true);}
+
+// Initial theme
+applyTheme(themes[themeSelect.value]);
+</script>
+
+</body>
+</html>
